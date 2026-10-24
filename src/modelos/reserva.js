@@ -27,6 +27,11 @@ const reservaSchema = new mongoose.Schema(
         message: "Debe ser entero",
       },
     },
+    estado: {
+      type: String,
+      default: "pendiente",
+      enum: ["pendiente", "confirmada"]
+    }
   },
   { collection: "reservas" },
 );
