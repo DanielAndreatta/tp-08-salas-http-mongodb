@@ -1,0 +1,41 @@
+{
+  "name": "tp-08-salas-http-mongodb",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "start:local": "node --env-file .env src/index.js",
+    "format": "prettier --write src scripts",
+    "format:check": "prettier --check src scripts",
+    "lint": "eslint src scripts",
+    "check": "npm run format:check && npm run lint",
+    "comprobardb": "node --env-file .env scripts/comprobar-conexion.js",
+    "crearreservas": "node --env-file .env scripts/crear-reserva.js",
+    "listar": "node --env-file .env scripts/listar-reservas.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DanielAndreatta/tp-08-salas-http-mongodb.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/DanielAndreatta/tp-08-salas-http-mongodb/issues"
+  },
+  "homepage": "https://github.com/DanielAndreatta/tp-08-salas-http-mongodb#readme",
+  "dependencies": {
+    "ejs": "^6.0.1",
+    "express": "^5.2.1",
+    "express-ejs-layouts": "^2.5.1",
+    "mongoose": "9.10.3",
+    "morgan": "^1.12.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "prettier": "^3.9.9"
+  }
+}
