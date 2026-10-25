@@ -76,31 +76,30 @@ Con el servidor corriendo localmente (`node --env-file=.env src/index.js`), ejec
    - **Método:** `GET` | **URL:** `http://localhost:3000/api/reservas?sala=Sala%20Norte`
    - **Respuesta:** 200 OK. Arreglo JSON solo con las coincidencias exactas.
 
-## 8. Matriz de Pruebas y Resultados
-**Nota sobre Morgan:** Como `app.use(morgan(...))` está registrado al principio del pipeline en `app.js`, intercepta absolutamente todas las solicitudes, incluyendo los recursos estáticos cargados exitosamente por `express.static` (`/css/estilos.css`) y las peticiones que terminan en el middleware 404 final.
+## 8. Matriz mínima de pruebas y resultados
+**Nota sobre Morgan:** Al estar registrado al inicio del pipeline, Morgan registra todas las solicitudes, incluyendo recursos estáticos y errores 404.
 
-| Caso | Método / Endpoint | Estado HTTP | Resultado Evidenciado |
-| :--- | :--- | :--- | :--- |
-| **Arranque sin URI** | Terminal | Falla (Código 1)| No abre el puerto. Lanza error: "Falta MONGODB_URI en el entorno". |
-| **Listado vacío (Base nueva)** | GET `/api/reservas` | 200 OK | Retorna `[]` válido. No realiza inserciones automáticas. |
-| **Crear válido API** | POST `/api/reservas` | 201 Created | Retorna JSON con `_id` limpio y añade `Location` en cabeceras. |
-| **Consulta por ID creado** | GET `/api/reservas/:id` | 200 OK | Muestra exactamente el mismo recurso creado en el paso anterior. |
-| **Persistencia tras reinicio** | GET `/api/reservas/:id` | 200 OK | Al detener y reiniciar Node, se recupera el mismo documento desde Mongo. |
-| **ID mal formado** | GET `/api/reservas/1` | 400 Bad Request | Retorna JSON: `{"error": "El identificador debe tener 24 caracteres..."}`. |
-| **ID válido inexistente** | GET `/api/reservas/000000000000000000000000` | 404 Not Found | Retorna JSON: `{"error": "Reserva no encontrada."}`. |
-| **POST sin cuerpo / JSON roto**| POST `/api/reservas` | 400 Bad Request | Falla parseo. Retorna JSON de error. La cantidad de BD no aumenta. |
-| **POST estudiante vacío** | POST `/api/reservas` | 400 Bad Request | Falla validación `trim/required`. BD no aumenta. |
-| **POST email sin @** | POST `/api/reservas` | 400 Bad Request | Falla validación `match`. Retorna alerta. BD no aumenta. |
-| **POST sala no permitida** | POST `/api/reservas` | 400 Bad Request | Falla regla `enum`. Retorna alerta de campos inválidos. |
-| **POST personas: 0 o 7** | POST `/api/reservas` | 400 Bad Request | Falla validación de límites `min/max`. Retorna JSON/Alerta. BD intacta. |
-| **POST personas float (2.5)** | POST `/api/reservas` | 400 Bad Request | Falla función `validate: isInteger`. Retorna error. BD intacta. |
-| **POST personas string ("abc")**| POST `/api/reservas` | 400 Bad Request | Falla conversión del validador de Express. Retorna alerta. BD intacta. |
-| **POST con campos extra** | POST `/api/reservas` | 201 Created | Ignora los campos maliciosos (ej: `_id` o `estado` falso) y crea con ID propio y estado `pendiente`. |
-| **Filtro exacto de Sala** | GET `/api/reservas?sala=Sala%20Norte` | 200 OK | Arreglo filtrado. Si se envía una sala sin uso, devuelve `[]`. |
-| **Filtro Sala como arreglo** | GET `...?sala=x&sala=y` | 400 Bad Request | Validador rechaza si `typeof sala !== "string"`. Evita error interno. |
-| **Formulario Web Válido** | POST `/reservas` | 302 Found | Guarda en MongoDB y redirige a la vista listado que muestra el alta. |
-| **Formulario Web Inválido** | POST `/reservas` | 400 Bad Request | El middleware EJS intercepta el error, renderiza `nueva.ejs` y conserva valores. |
-| **Estado y Continuidad Web** | GET `/estado` | 200 OK | Continúa devolviendo `{"servicio":"activo", "reservas": X, "solicitudId":"..."}` contando directamente desde MongoDB (`countDocuments()`). |
+| Caso | Resultado Esperado | Resultado Observado / Evidencia |
+| :--- | :--- | :--- |
+| **Listado vacío si la base es nueva** | 200, `[]` | 200 OK. Retorna arreglo vacío sin hacer inserciones. |
+| **Creación válida** | 201 y Location | 201 Created. Devuelve JSON con el recurso y cabecera `Location`. |
+| **Consulta por ID creado** | 200, mismo recurso | 200 OK. La petición GET al ID creado devuelve exactamente los mismos campos. |
+| **Consulta tras reiniciar** | 200, mismo ID | 200 OK. Tras detener y arrancar Node, la consulta devuelve el mismo documento de Mongo. |
+| **ID "1"** | 400 | 400 Bad Request. JSON advierte: "El identificador debe tener 24 caracteres...". |
+| **ID válido inexistente** | 404 | 404 Not Found. JSON: `{"error": "Reserva no encontrada."}`. |
+| **Estudiante vacío o email sin @** | 400, cantidad sin aumento | 400 Bad Request. El validador rechaza y la base se mantiene estable. |
+| **Sala o turno no permitido** | 400, cantidad sin aumento | 400 Bad Request. Falla validación enum, la base se mantiene estable. |
+| **Fecha vacía** | 400 | 400 Bad Request. Rechaza campo obligatorio. |
+| **Personas 0, 7, 2.5 o "abc", por separado** | 400 | 400 Bad Request. Falla validación `min/max`, `isInteger` y conversión de tipos. |
+| **Personas true, arreglo u objeto** | 400 | 400 Bad Request. La conversión rechaza booleanos y objetos (devuelve NaN). |
+| **POST sin cuerpo o JSON mal formado** | 400 JSON | 400 Bad Request. La validación `req.body ?? {}` lo atrapa. BD intacta. |
+| **Campos extra estado o _id** | No los asigna el cliente | 201 Created. Se ignoran los datos falsos, Mongo asigna nuevo `_id` y estado `pendiente`. |
+| **Filtro exacto por sala** | Solo coincidencias; sin coincidencias `[]` | 200 OK. Devuelve las reservas de la sala enviada, o un array vacío si no hay uso. |
+| **Sala repetida como parámetro** | 400 | 400 Bad Request. Se rechaza arreglos en `req.query` antes de ir a Mongo. |
+| **Listar dos veces** | Cantidad estable | 200 OK. Dos consultas consecutivas devuelven la misma cantidad de registros. |
+| **Formulario válido / inválido** | 302 / 400 | 302 Found tras crear, o 400 Bad Request renderizando `nueva.ejs` con los valores previos. |
+| **Estado y sitio** | Conteo persistente y vistas correctas | 200 OK. `/estado` llama a `countDocuments()`. Las vistas de HTML operan normalmente. |
+| **Fallo de arranque con URI ausente** | No abre el puerto | Código 1 en terminal. Captura el error "Falta MONGODB_URI" antes del listen. |
 
 ## 9. Seguridad
 Se confirma que los archivos `.env`, credenciales, datos personales y carpetas de dependencias (`node_modules/`) no están presentes en el repositorio, al ser interceptados correctamente por el `.gitignore`.
