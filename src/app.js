@@ -1,30 +1,26 @@
+
 const express = require("express");
 const expressLayouts = require("express-ejs-layouts");
 const morgan = require("morgan");
 const path = require("node:path");
 
-const {
-  crearIdentificadorSolicitud,
-  medirDuracion,
-} = require("./middleware/solicitudes");
+const { crearIdentificadorSolicitud, medirDuracion } = require("./middleware/solicitudes");
+const { crearManejadorErrores } = require("./middleware/errores");
 
 const { crearControladorReservas } = require("./controladores/reservas");
 const { crearRouterReservas } = require("./rutas/reservas");
+const { crearRouterReservasApi } = require("./rutas/reservas-api");
 
 function crearApp({ servicioReservas, formatoRegistro }) {
   const app = express();
 
-  // Instanciamos controlador y router
-  const controladorReservas = crearControladorReservas(servicioReservas);
-  const reservasRouter = crearRouterReservas(controladorReservas);
+  const controlador = crearControladorReservas(servicioReservas);
 
-  // Configuración de vistas
   app.set("view engine", "ejs");
   app.set("views", path.join(__dirname, "..", "views"));
   app.set("layout", "layouts/main");
 
-  // Pipeline de middleware global
-  app.use(morgan(formatoRegistro)); // inyectamos el formato dinámico
+  app.use(morgan(formatoRegistro));
   app.use(crearIdentificadorSolicitud());
   app.use(medirDuracion);
   app.use(expressLayouts);
@@ -32,23 +28,34 @@ function crearApp({ servicioReservas, formatoRegistro }) {
   app.use(express.urlencoded({ extended: false }));
   app.use(express.json());
 
-  // Rutas de aplicación
   app.get("/", (req, res) => {
     res.render("inicio", { titulo: "Reserva de Salas" });
   });
 
-  app.get("/estado", controladorReservas.estado);
+  app.get("/estado", controlador.estado);
 
-  // Montaje del router
-  app.use("/reservas", reservasRouter);
+  // Montamos la API JSON y el sitio web HTML
+  app.use("/api/reservas", crearRouterReservasApi(controlador));
+  app.use("/reservas", crearRouterReservas(controlador));
 
-  // Middleware 404 (al final del pipeline)
+  // Middleware de página/ruta no encontrada
   app.use((req, res) => {
+    if (req.path.startsWith("/api/")) {
+      return res.status(404).json({ error: "Ruta no encontrada." });
+    }
     res.status(404).render("no-encontrado", {
       titulo: "Página no encontrada",
-      mensaje: "La dirección solicitada no existe.",
+      mensaje: "La dirección solicitada no existe."
     });
   });
+
+  // Manejador centralizado de errores asíncronos (siempre va al final)
+  app.use(
+    crearManejadorErrores({
+      vistaFormulario: "reservas/nueva",
+      tituloFormulario: "Nueva Reserva"
+    })
+  );
 
   return app;
 }

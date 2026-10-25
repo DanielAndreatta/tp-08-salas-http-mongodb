@@ -1,66 +1,59 @@
+
 const { leerConfiguracion } = require("./config/entorno");
-const { crearServicioReservas } = require("./servicios/reservas");
+const { conectarBaseDatos, desconectarBaseDatos } = require("./config/base-datos");
+const { crearServicioReservasMongo } = require("./servicios/reservas-mongo");
 const { crearApp } = require("./app");
 
-// Semilla inicial
-const reservasIniciales = [
-  {
-    id: 1,
-    estudiante: "Ana López",
-    email: "ana@ejemplo.com",
-    sala: "Sala Norte",
-    fecha: "2026-10-01",
-    turno: "Mañana",
-    personas: 2,
-  },
-  {
-    id: 2,
-    estudiante: "Carlos Ruiz",
-    email: "carlos@ejemplo.com",
-    sala: "Sala Multimedia",
-    fecha: "2026-10-02",
-    turno: "Tarde",
-    personas: 5,
-  },
-  {
-    id: 3,
-    estudiante: "María Soler",
-    email: "maria@ejemplo.com",
-    sala: "Sala Sur",
-    fecha: "2026-10-03",
-    turno: "Noche",
-    personas: 3,
-  },
-  {
-    id: 4,
-    estudiante: "Juan Pérez",
-    email: "juan@ejemplo.com",
-    sala: "Sala Norte",
-    fecha: "2026-10-04",
-    turno: "Mañana",
-    personas: 1,
-  },
-];
-
-function main() {
-  // 1. Leer y validar la configuración del entorno
+async function main() {
   const { puerto, formatoRegistro } = leerConfiguracion();
 
-  // 2. Crear el servicio con los datos iniciales
-  const servicioReservas = crearServicioReservas(reservasIniciales);
+  // Primero, esperamos a que la base de datos se conecte
+  await conectarBaseDatos();
 
-  // 3. Crear la aplicación Express inyectando dependencias
+  // Inicializamos el servicio de MongoDB en lugar de usar memoria
+  const servicioReservas = crearServicioReservasMongo();
+
   const app = crearApp({ servicioReservas, formatoRegistro });
 
-  // 4. Arrancar el proceso en el puerto validado
-  app.listen(puerto, () => {
+  // Segundo, solo si conectó a Mongo, abrimos el puerto web
+  const servidor = app.listen(puerto, () => {
     console.log(`Aplicación disponible en http://localhost:${puerto}`);
+  });
+
+  // Control para cierre ordenado
+  let cerrando = false;
+  function cerrar() {
+    if (cerrando) return;
+    cerrando = true;
+    servidor.close(async () => {
+      try {
+        await desconectarBaseDatos();
+      } catch (error) {
+        console.error("Error al cerrar:", error.name);
+        process.exitCode = 1;
+      }
+    });
+  }
+
+  process.once("SIGINT", cerrar);
+  process.once("SIGTERM", cerrar);
+
+  servidor.on("error", (error) => {
+    console.error("No se pudo escuchar el puerto:", error.code);
+    process.exitCode = 1;
+    desconectarBaseDatos().catch((fallo) => {
+      console.error("Error al cerrar:", fallo.name);
+    });
   });
 }
 
-try {
-  main();
-} catch (error) {
-  console.error("No se pudo iniciar la aplicación:", error.message);
+main().catch(async (error) => {
+  console.error("No se pudo iniciar la aplicación:", error.name);
+  console.error("Revisar entorno, DNS, red, acceso de Atlas y puerto.");
   process.exitCode = 1;
-}
+  try {
+    await desconectarBaseDatos();
+  } catch (fallo) {
+    console.error("Error al cerrar:", fallo.name);
+  }
+});
