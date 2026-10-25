@@ -8,8 +8,8 @@ async function main() {
   try {
     await conectarBaseDatos();
     const reserva = await Reserva.create({
-      estudiante: "Daniel Andreatta",
-      email: "daniel@ejemplo.com",
+      estudiante: "Carlos Ejemplo",
+      email: "carlos@ejemplo.com",
       sala: "Sala Norte",
       fecha: "2026-10-25",
       turno: "Mañana",
