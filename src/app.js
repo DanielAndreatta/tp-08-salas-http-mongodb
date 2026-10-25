@@ -1,10 +1,12 @@
-
 const express = require("express");
 const expressLayouts = require("express-ejs-layouts");
 const morgan = require("morgan");
 const path = require("node:path");
 
-const { crearIdentificadorSolicitud, medirDuracion } = require("./middleware/solicitudes");
+const {
+  crearIdentificadorSolicitud,
+  medirDuracion,
+} = require("./middleware/solicitudes");
 const { crearManejadorErrores } = require("./middleware/errores");
 
 const { crearControladorReservas } = require("./controladores/reservas");
@@ -45,7 +47,7 @@ function crearApp({ servicioReservas, formatoRegistro }) {
     }
     res.status(404).render("no-encontrado", {
       titulo: "Página no encontrada",
-      mensaje: "La dirección solicitada no existe."
+      mensaje: "La dirección solicitada no existe.",
     });
   });
 
@@ -53,8 +55,8 @@ function crearApp({ servicioReservas, formatoRegistro }) {
   app.use(
     crearManejadorErrores({
       vistaFormulario: "reservas/nueva",
-      tituloFormulario: "Nueva Reserva"
-    })
+      tituloFormulario: "Nueva Reserva",
+    }),
   );
 
   return app;

@@ -30,8 +30,8 @@ const reservaSchema = new mongoose.Schema(
     estado: {
       type: String,
       default: "pendiente",
-      enum: ["pendiente", "confirmada"]
-    }
+      enum: ["pendiente", "confirmada"],
+    },
   },
   { collection: "reservas" },
 );

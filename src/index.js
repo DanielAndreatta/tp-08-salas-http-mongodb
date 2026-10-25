@@ -1,6 +1,8 @@
-
 const { leerConfiguracion } = require("./config/entorno");
-const { conectarBaseDatos, desconectarBaseDatos } = require("./config/base-datos");
+const {
+  conectarBaseDatos,
+  desconectarBaseDatos,
+} = require("./config/base-datos");
 const { crearServicioReservasMongo } = require("./servicios/reservas-mongo");
 const { crearApp } = require("./app");
 
