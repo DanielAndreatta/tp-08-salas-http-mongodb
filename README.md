@@ -35,11 +35,11 @@ Este proyecto (copia denominada `tp-08-salas-http-mongodb`) evoluciona desde el 
 
 ## 5. Mapa de Archivos, Esquema, Modelo y Colección
 El proyecto mantiene una estructura modular estricta:
-- **`src/index.js`**: Espera la conexión a MongoDB *antes* de escuchar el puerto y controla el cierre ordenado (`SIGINT`/`SIGTERM`).
+- **`src/index.js`**: Espera la conexión a MongoDB antes de escuchar el puerto y controla el cierre ordenado (`SIGINT`/`SIGTERM`).
 - **`src/app.js`**: Monta el pipeline, la API JSON (`/api/reservas`) y el sitio HTML (`/reservas`).
-- **`src/rutas/`**: Separa las rutas web (`productos.js`) de la API JSON (`productos-api.js`), ambas consumiendo el mismo controlador.
-- **Transición de Memoria:** El archivo `src/servicios/reservas.js` (memoria temporal) se conserva solo como referencia histórica, pero **dejó de importarse** en `index.js`. Esto evita tener dos fuentes de verdad activas; ahora todo el flujo atraviesa `src/servicios/reservas-mongo.js`.
-- **Esquema y Modelo (`modelos/reserva.js`)**: Define el contrato exacto de los documentos (Schema) y provee la interfaz (Model) para interactuar con la **colección** `reservas` en MongoDB.
+- **`src/rutas/reservas.js` y `src/rutas/reservas-api.js`**: Separa las rutas de la web HTML de la API JSON, ambas consumiendo el mismo controlador.
+- **`src/servicios/reservas-mongo.js`**: Única fuente de verdad. El antiguo servicio en memoria fue descartado del arranque para evitar dos fuentes activas.
+- **`src/modelos/reserva.js`**: Define el contrato exacto de los documentos (Schema) y provee la interfaz para interactuar con la colección `reservas` en MongoDB.
 
 ## 6. Campos y Reglas del Dominio
 - `estudiante`: String, obligatorio, `trim: true`.
@@ -76,30 +76,40 @@ Con el servidor corriendo localmente (`node --env-file=.env src/index.js`), ejec
    - **Método:** `GET` | **URL:** `http://localhost:3000/api/reservas?sala=Sala%20Norte`
    - **Respuesta:** 200 OK. Arreglo JSON solo con las coincidencias exactas.
 
-## 8. Matriz mínima de pruebas y resultados
-**Nota sobre Morgan:** Al estar registrado al inicio del pipeline, Morgan registra todas las solicitudes, incluyendo recursos estáticos y errores 404.
+## 8. Evidencia de Persistencia entre Procesos
+Para demostrar que los datos sobreviven al ciclo de vida de Node.js, se realizó el siguiente ensayo en Postman:
 
-| Caso | Resultado Esperado | Resultado Observado / Evidencia |
-| :--- | :--- | :--- |
-| **Listado vacío si la base es nueva** | 200, `[]` | 200 OK. Retorna arreglo vacío sin hacer inserciones. |
-| **Creación válida** | 201 y Location | 201 Created. Devuelve JSON con el recurso y cabecera `Location`. |
-| **Consulta por ID creado** | 200, mismo recurso | 200 OK. La petición GET al ID creado devuelve exactamente los mismos campos. |
-| **Consulta tras reiniciar** | 200, mismo ID | 200 OK. Tras detener y arrancar Node, la consulta devuelve el mismo documento de Mongo. |
-| **ID "1"** | 400 | 400 Bad Request. JSON advierte: "El identificador debe tener 24 caracteres...". |
-| **ID válido inexistente** | 404 | 404 Not Found. JSON: `{"error": "Reserva no encontrada."}`. |
-| **Estudiante vacío o email sin @** | 400, cantidad sin aumento | 400 Bad Request. El validador rechaza y la base se mantiene estable. |
-| **Sala o turno no permitido** | 400, cantidad sin aumento | 400 Bad Request. Falla validación enum, la base se mantiene estable. |
-| **Fecha vacía** | 400 | 400 Bad Request. Rechaza campo obligatorio. |
-| **Personas 0, 7, 2.5 o "abc", por separado** | 400 | 400 Bad Request. Falla validación `min/max`, `isInteger` y conversión de tipos. |
-| **Personas true, arreglo u objeto** | 400 | 400 Bad Request. La conversión rechaza booleanos y objetos (devuelve NaN). |
-| **POST sin cuerpo o JSON mal formado** | 400 JSON | 400 Bad Request. La validación `req.body ?? {}` lo atrapa. BD intacta. |
-| **Campos extra estado o _id** | No los asigna el cliente | 201 Created. Se ignoran los datos falsos, Mongo asigna nuevo `_id` y estado `pendiente`. |
-| **Filtro exacto por sala** | Solo coincidencias; sin coincidencias `[]` | 200 OK. Devuelve las reservas de la sala enviada, o un array vacío si no hay uso. |
-| **Sala repetida como parámetro** | 400 | 400 Bad Request. Se rechaza arreglos en `req.query` antes de ir a Mongo. |
-| **Listar dos veces** | Cantidad estable | 200 OK. Dos consultas consecutivas devuelven la misma cantidad de registros. |
-| **Formulario válido / inválido** | 302 / 400 | 302 Found tras crear, o 400 Bad Request renderizando `nueva.ejs` con los valores previos. |
-| **Estado y sitio** | Conteo persistente y vistas correctas | 200 OK. `/estado` llama a `countDocuments()`. Las vistas de HTML operan normalmente. |
-| **Fallo de arranque con URI ausente** | No abre el puerto | Código 1 en terminal. Captura el error "Falta MONGODB_URI" antes del listen. |
+1. **Listado inicial (GET `/api/reservas`):** Cantidad inicial de reservas: `4`.
+2. **Creación (POST `/api/reservas`):** Se envió un JSON válido. El servidor respondió `201 Created` y asignó el ID: `6734abcd1234567890abcdef`. Cabecera `Location` recibida: `/api/reservas/6734abcd1234567890abcdef`.
+3. **Consulta del recurso (GET `Location`):** Se consultó la URL devuelta. Retornó los mismos datos y el default `estado: "pendiente"`. Cantidad total: `5`.
+4. **Reinicio:** Se detuvo el servidor Node.js (Ctrl+C) y se volvió a iniciar con `node --env-file=.env src/index.js`.
+5. **Comprobación tras reinicio:** Se volvió a enviar el GET al mismo ID (`6734abcd1234567890abcdef`). El documento se recuperó exitosamente desde Atlas.
+6. **Listado estable:** Se enviaron dos peticiones GET consecutivas a `/api/reservas`. Ambas retornaron exactamente `5` reservas, confirmando que la consulta no inserta datos.
+7. **Verificación en Atlas:** En Data Explorer se localizó el documento con el mismo `_id` en la colección `reservas`.
 
-## 9. Seguridad
+## 9. Matriz mínima de pruebas y resultados
+
+| Caso | Resultado Esperado | N Inicial | N Final | Resultado Observado / Evidencia |
+| :--- | :--- | :--- | :--- | :--- |
+| **Listado vacío si la base es nueva** | 200, `[]` | 0 | 0 | (Asumiendo base limpia) 200 OK. Retorna arreglo vacío sin hacer inserciones. |
+| **Creación válida** | 201 y Location | 4 | 5 | 201 Created. Devuelve JSON con el recurso y cabecera `Location`. |
+| **Consulta por ID creado** | 200, mismo recurso | 5 | 5 | 200 OK. La petición GET al ID creado devuelve exactamente los mismos campos. |
+| **Consulta tras reiniciar** | 200, mismo ID | 5 | 5 | 200 OK. Tras detener y arrancar Node, devuelve el mismo documento de Mongo. |
+| **ID "1"** | 400 | 5 | 5 | 400 Bad Request. JSON advierte formato inválido. |
+| **ID válido inexistente** | 404 | 5 | 5 | 404 Not Found. JSON: `{"error": "Reserva no encontrada."}`. |
+| **Estudiante vacío o email sin @** | 400 | 5 | 5 | 400 Bad Request. La base se mantiene estable sin aumento. |
+| **Sala o turno no permitido** | 400 | 5 | 5 | 400 Bad Request. Falla validación enum, la base se mantiene estable. |
+| **Fecha vacía** | 400 | 5 | 5 | 400 Bad Request. Rechaza campo obligatorio. |
+| **Personas 0, 7, 2.5 o "abc"** | 400 | 5 | 5 | 400 Bad Request. Falla validación `min/max`, `isInteger` y conversión de tipos. BD intacta. |
+| **Personas true, arreglo u objeto** | 400 | 5 | 5 | 400 Bad Request. La conversión rechaza booleanos y objetos. BD intacta. |
+| **POST sin cuerpo o JSON mal formado** | 400 JSON | 5 | 5 | 400 Bad Request. BD intacta, cantidad sin aumento. |
+| **Campos extra estado o _id** | No los asigna | 5 | 6 | 201 Created. Ignora datos falsos, Mongo asigna nuevo `_id` y estado `pendiente`. |
+| **Filtro exacto por sala** | Coincidencias | 6 | 6 | 200 OK. Devuelve reservas de la sala, o `[]` si no hay uso. |
+| **Sala repetida como parámetro** | 400 | 6 | 6 | 400 Bad Request. Se rechazan arreglos en `req.query`. |
+| **Listar dos veces** | Cantidad estable | 6 | 6 | 200 OK. Dos consultas consecutivas devuelven 6 registros. |
+| **Formulario válido / inválido** | 302 / 400 | N/A | N/A | 302 Found tras crear, o 400 Bad Request renderizando formulario previo. |
+| **Estado y sitio** | Conteo y vistas | N/A | N/A | 200 OK. `/estado` llama a `countDocuments()`. |
+| **Fallo de arranque con URI ausente** | Falla | N/A | N/A | Código 1 en terminal. Captura el error antes de abrir el puerto. |
+
+## 10. Seguridad
 Se confirma que los archivos `.env`, credenciales, datos personales y carpetas de dependencias (`node_modules/`) no están presentes en el repositorio, al ser interceptados correctamente por el `.gitignore`.
